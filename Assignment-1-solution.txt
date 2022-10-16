@@ -1,0 +1,187 @@
+1. Download vechile sales data -> https://github.com/shashank-mishra219/Hive-Class/blob/main/sales_order_data.csv
+
+2. Store raw data into hdfs location
+Dragged raw data from Desktop location to '/tmp/hive_class' location through Filezilla.
+Then transferred file from local storage to HDFS:
+> hdfs fs -put /tmp/hive_class/sales_order_data.csv /tmp/assignment1
+
+3. Create a internal hive table "sales_order_csv" which will store csv data sales_order_csv .. make sure to skip header row while creating table
+> create table sales_order_csv (
+    ORDERNUMBER int,
+    QUANTITYORDERED int,
+    PRICEEACH float,
+    ORDERLINENUMBER int,
+    SALES float,
+    STATUS string,
+    QTR_ID int,
+    MONTH_ID int,
+    YEAR_ID int,
+    PRODUCTLINE string,
+    MSRP int,
+    PRODUCTCODE string,
+    PHONE string,
+    CITY string,
+    STATE string,
+    POSTALCODE string,
+    COUNTRY string,
+    TERRITORY string,
+    CONTACTLASTNAME string,
+    CONTACTFIRSTNAME string,
+    DEALSIZE string
+    )
+    row format delimited
+    fields terminated by ','
+    tblproperties ("skip.header.line.count" = "1");
+
+4. Load data from hdfs path into "sales_order_csv" 
+> load data inpath '/tmp/assignment1/sales_order_data.csv' into table sales_order_csv;
+
+5. Create an internal hive table which will store data in ORC format "sales_order_orc"
+> create table sales_order_orc (
+    ORDERNUMBER int,
+    QUANTITYORDERED int,
+    PRICEEACH float,
+    ORDERLINENUMBER int,
+    SALES float,
+    STATUS string,
+    QTR_ID int,
+    MONTH_ID int,
+    YEAR_ID int,
+    PRODUCTLINE string,
+    MSRP int,
+    PRODUCTCODE string,
+    PHONE string,
+    CITY string,
+    STATE string,
+    POSTALCODE string,
+    COUNTRY string,
+    TERRITORY string,
+    CONTACTLASTNAME string,
+    CONTACTFIRSTNAME string,
+    DEALSIZE string
+    )
+    stored as orc;
+    
+6. Load data from "sales_order_csv" into "sales_order_orc"
+> from sales_order_csv insert overwrite table sales_order_orc select *;
+
+
+Perform below menioned queries on "sales_order_orc" table :
+--------------------------------------------------------------------------------------------------
+a. Calculatye total sales per year
+
+>   select 
+    PRODUCTLINE as Product,
+    sum(sales) as Sales
+    from sales_order_orc 
+    GROUP BY PRODUCTLINE;
+
+RESULT:
+            product                 sales
+            Classic Cars         3919615.6607666016
+            Motorcycles          1166388.3392333984
+            Planes               975003.5713500977
+            Ships                714437.1301269531
+            Trains               226243.46899414062
+            Trucks and Buses     1127789.8432617188
+            Vintage Cars         1903150.835571289
+-------------------------------------------------------------------------------------------------
+b. Find a product for which maximum orders were placed
+>   select PRODUCTLINE as Product,
+    sum(QUANTITYORDERED) Ordered_Quantity
+    FROM sales_order_orc
+    GROUP BY PRODUCTLINE
+    ORDER BY Ordered_Quantity DESC 
+    limit 1;
+
+RESULT:
+                Product         Ordered_Quantity
+                Classic Cars        33992
+
+-------------------------------------------------------------------------------------------------
+c. Calculate the total sales for each quarter
+>   select 
+    QTR_ID as Quater_No,
+    sum(sales) as Total_sales
+    from sales_order_orc
+    GROUP BY QTR_ID;
+
+RESULT:
+                Quater_No           Total_sales
+                1               2350817.726501465
+                2               2048120.3029174805
+                3               1758910.808959961
+                4               3874780.010925293
+-------------------------------------------------------------------------------------------------
+d. In which quarter sales was minimum
+>   select 
+    YEAR_ID as Year,
+    QTR_ID as Quater_No,
+    round(sum(sales),2) as Total_sales
+    from sales_order_orc
+    GROUP BY QTR_ID, YEAR_ID
+    ORDER BY Total_sales
+    limit 1;
+
+RESULT: 
+                YEAR_ID    QTR_ID       T otal_sales
+                2003         1           445094.69
+-------------------------------------------------------------------------------------------------
+e. In which COUNTRY sales was maximum and in which COUNTRY sales was minimum
+>   select round(sum(sales),2) as sales, "min_sales", COUNTRY from sales_order_orc
+    > group by COUNTRY
+    > order by sum1
+    > limit 1
+    > union all
+    > select round(sum(sales),2) as sales, "max_sales", COUNTRY from sales_order_orc
+    > group by COUNTRY
+    > order by sum1 desc
+    > limit 1;
+
+RESULT:
+                _u1.sales        _u1._c1         _u1.COUNTRY
+                57756.43        min sales      Ireland
+                3627982.83      max sales      USA
+-------------------------------------------------------------------------------------------------
+f. Calculate quartelry sales for each city
+>   select year_id, qtr_id,round(sum(sales),2) as quarterly_sales, city from sales_order_orc
+    group by city, year_id, qtr_id
+    order by city, year_id, qtr_id;
+
+RESULT:
+>
+                year_id qtr_id  quarterly_sales  CITY
+                2003    4       40321.61        Aaarhus
+                2004    4       60273.94        Aaarhus
+                2004    3       71930.61        Allentown
+                2004    4       44040.73        Allentown
+                2005    2       6166.8          Allentown
+                2003    2       4219.2          Barcelona
+                2003    4       44009.31        Barcelona
+                2004    4       30183.35        Barcelona
+                2003    1       56181.32        Bergamo
+                2003    4       40077.71        Bergamo
+                2004    4       41696.69        Bergamo
+                2003    4       95277.18        Bergen
+                2004    3       16363.1         Bergen
+                2003    4       48710.92        Boras
+                2004    3       53941.69        Boras
+                2005    1       31606.72        Boras
+                2003    4       63730.78        Boston
+                2004    2       26677.35        Boston
+                .
+                .
+                .
+                continued...
+    
+-------------------------------------------------------------------------------------------------
+h. Find a month for each year in which maximum number of quantities were sold
+>   select * from 
+    (
+        select DISTINCT MONTH_ID, YEAR_ID, QUANTITYORDERED,
+        DENSE_RANK() over (PARTITION BY YEAR_ID ORDER BY QUANTITYORDERED) as denseRanking
+        from sales_order_orc
+    ) r 
+    where r.denseRanking = 1; 
+
+---------------------------------------------------------------
